@@ -3,13 +3,15 @@ import Header from './components/Header';
 import SearchBar from './components/SearchBar';
 import UserTable from './components/UserTable';
 import Pagination from './components/Pagination';
-import { getUsers } from './api/userService';
+import UserForm from './components/UserForm';
+import { getUsers, createUser, updateUser } from './api/userService';
 import { mapUserData } from './utils/helpers';
 
 export default function App() {
   // --- Core State Variables ---
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
 
   // --- Search & Advanced Filters State ---
@@ -112,6 +114,40 @@ export default function App() {
   const handleDeleteUserClick = (id) => {
     setUserIdToDelete(id);
     setIsDeleteOpen(true);
+  };
+
+  // Form submit handler for additions and updates
+  const handleFormSubmit = async (formData) => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      if (selectedUser) {
+        // --- EDIT MODE (PUT) ---
+        await updateUser(selectedUser.id, formData);
+        
+        // Update local list state
+        setUsers(prev => prev.map(u => 
+          u.id === selectedUser.id ? { ...u, ...formData } : u
+        ));
+      } else {
+        // --- ADD MODE (POST) ---
+        // Calculate a unique local ID to avoid key duplicates
+        const nextId = users.length > 0 ? Math.max(...users.map(u => u.id)) + 1 : 11;
+        const newRecord = { ...formData, id: nextId };
+        
+        await createUser(newRecord);
+        
+        // Append new user to the front of list
+        setUsers(prev => [newRecord, ...prev]);
+      }
+      setIsFormOpen(false);
+      setSelectedUser(null);
+    } catch (err) {
+      console.error(err);
+      setError("An error occurred while saving user data. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // --- Processing Engine (Filtering & Sorting) ---
@@ -231,8 +267,16 @@ export default function App() {
         </>
       )}
 
-      {/* To be filled in Steps 7 & 8: */}
       {/* Form Modal for Add/Edit */}
+      <UserForm
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        onSubmit={handleFormSubmit}
+        user={selectedUser}
+        isSaving={isSaving}
+      />
+
+      {/* To be filled in Step 8: */}
       {/* Delete Confirmation Modal */}
     </div>
   );
