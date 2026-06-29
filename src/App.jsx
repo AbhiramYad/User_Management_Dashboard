@@ -4,7 +4,9 @@ import SearchBar from './components/SearchBar';
 import UserTable from './components/UserTable';
 import Pagination from './components/Pagination';
 import UserForm from './components/UserForm';
-import { getUsers, createUser, updateUser } from './api/userService';
+import ConfirmDelete from './components/ConfirmDelete';
+import ErrorBanner from './components/ErrorBanner';
+import { getUsers, createUser, updateUser, deleteUser } from './api/userService';
 import { mapUserData } from './utils/helpers';
 
 export default function App() {
@@ -12,7 +14,11 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState(null);
+  
+  // --- dismissible alert/toast state ---
+  const [notification, setNotification] = useState({ message: '', type: 'success' });
 
   // --- Search & Advanced Filters State ---
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,7 +37,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // --- Modal Handlers Placeholders (to be implemented in Steps 7 & 8) ---
+  // --- Modal Handlers ---
   const [selectedUser, setSelectedUser] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -119,7 +125,7 @@ export default function App() {
   // Form submit handler for additions and updates
   const handleFormSubmit = async (formData) => {
     setIsSaving(true);
-    setError(null);
+    setNotification({ message: '', type: 'success' });
     try {
       if (selectedUser) {
         // --- EDIT MODE (PUT) ---
@@ -129,6 +135,10 @@ export default function App() {
         setUsers(prev => prev.map(u => 
           u.id === selectedUser.id ? { ...u, ...formData } : u
         ));
+        setNotification({
+          message: `User ${formData.firstName} ${formData.lastName} updated successfully!`,
+          type: 'success'
+        });
       } else {
         // --- ADD MODE (POST) ---
         // Calculate a unique local ID to avoid key duplicates
@@ -139,15 +149,57 @@ export default function App() {
         
         // Append new user to the front of list
         setUsers(prev => [newRecord, ...prev]);
+        setNotification({
+          message: `User ${formData.firstName} ${formData.lastName} registered successfully!`,
+          type: 'success'
+        });
       }
       setIsFormOpen(false);
       setSelectedUser(null);
     } catch (err) {
       console.error(err);
-      setError("An error occurred while saving user data. Please try again.");
+      setNotification({
+        message: "An error occurred while saving user data. Please try again.",
+        type: 'error'
+      });
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // Delete confirm handler
+  const handleDeleteConfirm = async () => {
+    if (!userIdToDelete) return;
+    setIsDeleting(true);
+    setNotification({ message: '', type: 'success' });
+    try {
+      await deleteUser(userIdToDelete);
+      
+      // Update local state list
+      const userObj = users.find(u => u.id === userIdToDelete);
+      const nameStr = userObj ? `${userObj.firstName} ${userObj.lastName}` : "User";
+      
+      setUsers(prev => prev.filter(u => u.id !== userIdToDelete));
+      
+      setNotification({
+        message: `User profile "${nameStr}" successfully deleted.`,
+        type: 'success'
+      });
+      setIsDeleteOpen(false);
+      setUserIdToDelete(null);
+    } catch (err) {
+      console.error(err);
+      setNotification({
+        message: "Failed to delete user. Please try again.",
+        type: 'error'
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDismissNotification = () => {
+    setNotification({ message: '', type: 'success' });
   };
 
   // --- Processing Engine (Filtering & Sorting) ---
@@ -213,12 +265,23 @@ export default function App() {
     return processedUsers.slice(startIndex, startIndex + pageSize);
   }, [processedUsers, verifiedCurrentPage, pageSize]);
 
+  // Determine user name for delete warning description
+  const userToDelete = users.find(u => u.id === userIdToDelete);
+  const deleteNameStr = userToDelete ? `${userToDelete.firstName} ${userToDelete.lastName}` : "this user";
+
   return (
     <div className="app-container">
       {/* Dashboard Topbar */}
       <Header 
         totalUsers={users.length} 
         onAddClick={handleAddUserClick}
+      />
+
+      {/* Toast Notification Alert Overlay */}
+      <ErrorBanner
+        message={notification.message}
+        type={notification.type}
+        onDismiss={handleDismissNotification}
       />
 
       {/* Search and Filters */}
@@ -276,8 +339,14 @@ export default function App() {
         isSaving={isSaving}
       />
 
-      {/* To be filled in Step 8: */}
       {/* Delete Confirmation Modal */}
+      <ConfirmDelete
+        isOpen={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        isDeleting={isDeleting}
+        userName={deleteNameStr}
+      />
     </div>
   );
 }
